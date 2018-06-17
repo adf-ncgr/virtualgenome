@@ -1,5 +1,6 @@
 from flask import Flask, request, send_file, make_response
 import logging
+import urllib2
 
 app = Flask(__name__)
 
@@ -39,13 +40,20 @@ def create_virtual_fai():
     with open('config.txt') as cfg:
         genomes = cfg.read().splitlines()
     for gnm in (genomes):
-        thisfile = open(gnm+'.fai')
-        for line in thisfile: 
-            data = line.split('\t')
-            new_offset = int(data[2]) + offset
-            data[2] = str(new_offset)
-            retval += '\t'.join(data)
-        thisfile.close()
+        if gnm.startswith("https://"):
+            thisfile = urllib2.urlopen(urllib2.Request(gnm+'.fai'))
+            for line in thisfile: 
+                data = line.split('\t')
+                new_offset = int(data[2]) + offset
+                data[2] = str(new_offset)
+                retval += '\t'.join(data)
+        else:
+            with open(gnm+'.fai') as thisfile:
+                for line in thisfile: 
+                    data = line.split('\t')
+                    new_offset = int(data[2]) + offset
+                    data[2] = str(new_offset)
+                    retval += '\t'.join(data)
         #figure out offset (ie what the concatenated offset would be in the virtual genome)
         lastseq_offset = int(data[2])
         lastseq_len = int(data[1])
@@ -53,7 +61,7 @@ def create_virtual_fai():
         lastseq_linedelim_len = int(data[4])-int(data[3])
         import math
         new_offset = offset + lastseq_offset + lastseq_len + lastseq_linedelim_len*(int(math.ceil(float(lastseq_len)/lastseq_line_len)))
-        virtual_fai_offsets[offset:new_offset] = {'file':gnm, 'offset':offset}
+        virtual_fai_offsets[offset:new_offset] = {'genome':gnm, 'offset':offset}
         offset = new_offset
     return retval
 
@@ -64,8 +72,13 @@ def get_fa_slice(byterange):
     start = int(m.group(1))
     stop = int(m.group(2))
     d = virtual_fai_offsets[start:stop].pop().data
-    f = open(d['file'])
-    f.seek(start-d['offset'])
+    gnm = d['genome']
+    #FIXME: this seems inefficient, but how can we redirect and reset the range requested on the target?
+    if gnm.startswith('https://'):
+        f = urllib2.urlopen(urllib2.Request(gnm, headers = {'Range': 'bytes:'+str(start-d['offset'])+'-'+str(stop-d['offset'])}))
+    else:
+        f = open(gnm)
+        f.seek(start-d['offset'])
     r = make_response(send_file(f, 'X-application-fasta'), 206)
     r.headers['Content-Length'] = stop-start+1
     r.headers['Accept-Ranges'] = 'bytes'
