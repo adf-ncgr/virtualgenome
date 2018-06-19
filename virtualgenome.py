@@ -168,7 +168,7 @@ def get_fa_slice(byterange):
     sys.stderr.write('byte range from ' + str(start) + ' to ' + str(stop) + ' was matched to genome ' + gnm + ' with offset ' + str(d['offset']) + '\n')
     #FIXME: this seems inefficient, but how can we redirect and reset the range requested on the target?
     if protocol_matcher.match(gnm):
-        f = urllib2.urlopen(urllib2.Request(gnm, headers = {'Range': 'bytes:'+str(start-d['offset'])+'-'+str(stop-d['offset'])}))
+        f = urllib2.urlopen(urllib2.Request(gnm, headers = {'Range': 'bytes='+str(start-d['offset'])+'-'+str(stop-d['offset'])}))
     else:
         f = open(gnm)
         f.seek(start-d['offset'])
