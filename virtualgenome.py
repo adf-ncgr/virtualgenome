@@ -93,6 +93,8 @@ def create_virtual_fai():
         new_offset = offset + lastseq_offset + lastseq_len + lastseq_linedelim_len*(int(math.ceil(float(lastseq_len)/lastseq_line_len)))
         virtual_fai_offsets[offset:new_offset] = {'genome':gnm, 'offset':offset}
         offset = new_offset
+        import sys
+        sys.stderr.write('genome_size for ' + gnm + ' is ' + str(offset));
         genome_sizes[gnm] = offset
     return retval
 
@@ -111,7 +113,8 @@ def create_virtual_gzi():
     """implementation details of virtual gzi construction
     """
     retval = ''
-    offset = 0
+    start_compressed_offset = 0
+    start_uncompressed_offset = 0
     total_entries = 0
     global virtual_gzi_offsets
     with open('config.txt') as cfg:
@@ -129,8 +132,8 @@ def create_virtual_gzi():
             while i < num_entries:
                 compressed_offset = unpack('<Q',thisfile.read(8))[0]
                 uncompressed_offset = unpack('<Q',thisfile.read(8))[0]
-                new_compressed_offset = compressed_offset + offset
-                new_uncompressed_offset = uncompressed_offset + offset
+                new_compressed_offset = compressed_offset + start_compressed_offset
+                new_uncompressed_offset = uncompressed_offset + start_uncompressed_offset
                 retval += pack('<Q',new_compressed_offset)
                 retval += pack('<Q',new_uncompressed_offset)
                 i+=1
@@ -144,15 +147,19 @@ def create_virtual_gzi():
                 while i < num_entries:
                     compressed_offset = unpack('<Q',thisfile.read(8))[0]
                     uncompressed_offset = unpack('<Q',thisfile.read(8))[0]
-                    new_compressed_offset = compressed_offset + offset
-                    new_uncompressed_offset = uncompressed_offset + offset
+                    new_compressed_offset = compressed_offset + start_compressed_offset
+                    new_uncompressed_offset = uncompressed_offset + start_uncompressed_offset
                     retval += pack('<Q',new_compressed_offset)
                     retval += pack('<Q',new_uncompressed_offset)
                     i+=1
-        #not sure this makes sense, but can't think of anything better
-        new_offset = offset + genome_sizes[gnm]
-        virtual_gzi_offsets[offset:new_offset] = {'genome':gnm, 'offset':offset}
-        offset = new_offset
+        #not sure using genome_size makes sense for compressed, but can't think of anything better
+        #FIXME: follow IGV logic in determining end range which is some function of a fixed buffer size?
+        new_compressed_offset = start_compressed_offset + genome_sizes[gnm]
+        new_uncompressed_offset = start_uncompressed_offset + genome_sizes[gnm]
+        import sys
+        sys.stderr.write('offset for ' + gnm + ' is ' + str(start_compressed_offset) + '\n')
+        virtual_gzi_offsets[start_compressed_offset:new_compressed_offset] = {'genome':gnm, 'offset':start_compressed_offset}
+        start_compressed_offset = new_compressed_offset
     return pack('<Q',total_entries)+retval
 
 def get_fa_slice(byterange):
@@ -160,17 +167,20 @@ def get_fa_slice(byterange):
     start = int(m.group(1))
     stop = int(m.group(2))
     if virtual_gzi_offsets:
-        d = virtual_gzi_offsets[start:stop].pop().data
+        import sys
+        sys.stderr.write('interval overlaps='+str(len(virtual_gzi_offsets[start]))+'\n')
+        d = virtual_gzi_offsets[start].pop().data
     else:
         d = virtual_fai_offsets[start:stop].pop().data
     gnm = d['genome']
     import sys
     sys.stderr.write('byte range from ' + str(start) + ' to ' + str(stop) + ' was matched to genome ' + gnm + ' with offset ' + str(d['offset']) + '\n')
-    #FIXME: this seems inefficient, but how can we redirect and reset the range requested on the target?
+    #FIXME: this seems inefficient, but how can we redirect the client and tell them reset the range they had requested on the target? seems like it is not possible
     if protocol_matcher.match(gnm):
         f = urllib2.urlopen(urllib2.Request(gnm, headers = {'Range': 'bytes='+str(start-d['offset'])+'-'+str(stop-d['offset'])}))
     else:
         f = open(gnm)
+        sys.stderr.write('seeking to ' + str(start-d['offset']) + '\n')
         f.seek(start-d['offset'])
     r = make_response(send_file(f, 'X-application-fasta'), 206)
     r.headers['Content-Length'] = stop-start+1
