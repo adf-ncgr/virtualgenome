@@ -152,13 +152,15 @@ def create_virtual_gzi():
                     retval += pack('<Q',new_compressed_offset)
                     retval += pack('<Q',new_uncompressed_offset)
                     i+=1
+        new_uncompressed_offset = start_uncompressed_offset + genome_sizes[gnm]
         #not sure using genome_size makes sense for compressed, but can't think of anything better
         #FIXME: follow IGV logic in determining end range which is some function of a fixed buffer size?
         new_compressed_offset = start_compressed_offset + genome_sizes[gnm]
-        new_uncompressed_offset = start_uncompressed_offset + genome_sizes[gnm]
         import sys
         sys.stderr.write('offset for ' + gnm + ' is ' + str(start_compressed_offset) + '\n')
-        virtual_gzi_offsets[start_compressed_offset:new_compressed_offset] = {'genome':gnm, 'offset':start_compressed_offset}
+        #the -1 was added to this after a commit that took place before a long hiatus from this code; not sure if it's a good thing but leaving for now while I try the MultiFile strategy
+        virtual_gzi_offsets[start_compressed_offset:new_compressed_offset-1] = {'genome':gnm, 'offset':start_compressed_offset}
+        start_uncompressed_offset = new_uncompressed_offset
         start_compressed_offset = new_compressed_offset
     return pack('<Q',total_entries)+retval
 
