@@ -151,6 +151,8 @@ def get_gzi():
     if there is none yet for the current application context.
     """
     global virtual_gzi
+    import sys
+    sys.stderr.write("get_gzi called")
     if not genome_sizes:
         get_fai()
     if not virtual_gzi:
@@ -218,14 +220,14 @@ def get_fa_slice(byterange):
     stop = int(m.group(2))
     if len(virtual_gzi_offsets):
         import sys
-        sys.stderr.write('interval overlaps='+str(len(virtual_gzi_offsets[start]))+'\n')
-        d = virtual_gzi_offsets[start].pop().data
+        sys.stderr.write('interval overlaps='+str(len(virtual_gzi_offsets[start:stop]))+'\n')
+        d = virtual_gzi_offsets[start:stop].pop().data
     else:
         d = virtual_fai_offsets[start:stop].pop().data
     gnm = d['genome']
     import sys
     sys.stderr.write('byte range from ' + str(start) + ' to ' + str(stop) + ' was matched to genome ' + gnm + ' with offset ' + str(d['offset']) + '\n')
-    f = VirtualFile(gnm,start-d['offset'],8192)
+    f = VirtualFile(gnm,start-d['offset'],65536)
     r = make_response(send_file(f, 'X-application-fasta'), 206)
     r.headers['Content-Length'] = stop-start+1
     r.headers['Accept-Ranges'] = 'bytes'
