@@ -7,6 +7,11 @@ app = Flask(__name__)
 
 virtual_fai = None
 virtual_gzi = None
+#this isn't really per the spec, which just says:
+# "blocks which are no larger than 64 kilobytes both before and 
+#  after compression (including compression headers)"
+#but it seems to be what gets used in practice (based on very limited sampling)
+GZI_BLOCK_SIZE = 65280
 genome_sizes = {}
 #for VirtualFile handoff strategy
 genome_succession = {}
@@ -96,7 +101,7 @@ def get_fai():
         virtual_fai = create_virtual_fai()
     #FIXME: eventually, probably just write this to disk when constructed and return that way
     import sys
-    sys.stderr.write(virtual_fai)
+    #sys.stderr.write(virtual_fai)
     return virtual_fai
 
 def create_virtual_fai():
@@ -161,6 +166,8 @@ def get_gzi():
 
 def create_virtual_gzi():
     """implementation details of virtual gzi construction
+    gzi format described here: http://www.htslib.org/doc/bgzip.1.html#GZI_FORMAT
+    but really just a mapping between compressed and uncompressed offsets
     """
     retval = ''
     start_compressed_offset = 0
@@ -172,11 +179,15 @@ def create_virtual_gzi():
     for gnm in genomes:
         if gnm.startswith('#'):
             continue
-        #TODO: what if some genomes are not compressed? we probably can't mix and match
+        #TODO: what if some genomes are not compressed? we probably can't mix and match (so we should validate the config)
         if protocol_matcher.match(gnm):
             thisfile = urllib2.urlopen(urllib2.Request(gnm+'.gzi'))
             genome_size = genome_sizes[gnm]
+            #note that for gzi we have specified :
+            # All values are stored as little-endian 64-bit unsigned integers.
             num_entries = unpack('<Q',thisfile.read(8))[0]
+            import sys
+            sys.stderr.write(gnm + " had num_entries = " + str(num_entries))
             total_entries += num_entries
             i = 0
             while i < num_entries:
